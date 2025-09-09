@@ -5,6 +5,16 @@
   id: BaseMobMoth
   abstract: true
   components:
+  - type: Reactive
+    reactions:
+    - reagents: [ PestKiller ]
+      methods: [ Touch ]
+      effects:
+      - !type:HealthChange
+        scaleByQuantity: true
+        damage:
+          types:
+            Caustic: 2
   - type: HumanoidAppearance
     species: Moth
     hideLayersOnEquip:

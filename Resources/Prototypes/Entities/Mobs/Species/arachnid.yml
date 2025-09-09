@@ -31,6 +31,14 @@
         amount: 5
   - type: Reactive
     reactions:
+    - reagents: [ PestKiller ]
+      methods: [ Touch ]
+      effects:
+      - !type:HealthChange
+        scaleByQuantity: true
+        damage:
+          types:
+            Caustic: 2
     - reagents: [Water]
       methods: [Touch]
       effects:
