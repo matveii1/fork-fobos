@@ -31,6 +31,7 @@
         amount: 5
   - type: Reactive
     reactions:
+    # DS14-start
     - reagents: [ PestKiller ]
       methods: [ Touch ]
       effects:
@@ -39,6 +40,7 @@
         damage:
           types:
             Caustic: 2
+    # DS14-end
     - reagents: [Water]
       methods: [Touch]
       effects:

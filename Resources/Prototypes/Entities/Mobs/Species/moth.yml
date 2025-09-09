@@ -5,16 +5,6 @@
   id: BaseMobMoth
   abstract: true
   components:
-  - type: Reactive
-    reactions:
-    - reagents: [ PestKiller ]
-      methods: [ Touch ]
-      effects:
-      - !type:HealthChange
-        scaleByQuantity: true
-        damage:
-          types:
-            Caustic: 2
   - type: HumanoidAppearance
     species: Moth
     hideLayersOnEquip:
@@ -140,6 +130,18 @@
             sprite: Mobs/Species/Human/displacement.rsi
             state: jumpsuit-female
   - type: Sanity # DS14
+  # DS14-start
+  - type: Reactive
+    reactions:
+    - reagents: [ PestKiller ]
+      methods: [ Touch ]
+      effects:
+      - !type:HealthChange
+        scaleByQuantity: true
+        damage:
+          types:
+            Caustic: 2
+  # DS14-end
   # - type: FootPrints # Backmen-footsteps
 
 - type: entity
