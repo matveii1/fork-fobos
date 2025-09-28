@@ -6,8 +6,8 @@ using Content.Server.Administration.Logs;
 using Content.Server.Administration.Managers;
 using Content.Server.Chat.Systems;
 using Content.Server.Communications;
+using Content.Server.DeviceNetwork.Components;
 using Content.Server.DeviceNetwork.Systems;
-using Content.Server.GameTicking;
 using Content.Server.GameTicking.Events;
 using Content.Server.Pinpointer;
 using Content.Server.Popups;
@@ -15,13 +15,13 @@ using Content.Server.RoundEnd;
 using Content.Server.Screens.Components;
 using Content.Server.Shuttles.Components;
 using Content.Server.Shuttles.Events;
+using Content.Server.Station.Components;
 using Content.Server.Station.Events;
 using Content.Server.Station.Systems;
 using Content.Shared.Access.Systems;
 using Content.Shared.CCVar;
 using Content.Shared.Database;
 using Content.Shared.DeviceNetwork;
-using Content.Shared.DeviceNetwork.Components;
 using Content.Shared.GameTicking;
 using Content.Shared.Localizations;
 using Content.Shared.Shuttles.Components;
@@ -34,7 +34,6 @@ using Robust.Shared.Configuration;
 using Robust.Shared.EntitySerialization.Systems;
 using Robust.Shared.Map.Components;
 using Robust.Shared.Player;
-using Robust.Shared.Prototypes;
 using Robust.Shared.Random;
 using Robust.Shared.Timing;
 using Robust.Shared.Utility;
@@ -59,7 +58,6 @@ public sealed partial class EmergencyShuttleSystem : EntitySystem
     [Dependency] private readonly CommunicationsConsoleSystem _commsConsole = default!;
     [Dependency] private readonly DeviceNetworkSystem _deviceNetworkSystem = default!;
     [Dependency] private readonly DockingSystem _dock = default!;
-    [Dependency] private readonly GameTicker _ticker = default!;
     [Dependency] private readonly IdCardSystem _idSystem = default!;
     [Dependency] private readonly NavMapSystem _navMap = default!;
     [Dependency] private readonly MapLoaderSystem _loader = default!;
@@ -75,8 +73,10 @@ public sealed partial class EmergencyShuttleSystem : EntitySystem
     private const float ShuttleSpawnBuffer = 1f;
 
     private bool _emergencyShuttleEnabled;
+    public float Multiplier { get; private set; } = 1f;
 
-    private static readonly ProtoId<TagPrototype> DockTag = "DockEmergency";
+    [ValidatePrototypeId<TagPrototype>]
+    private const string DockTag = "DockEmergency";
 
     public override void Initialize()
     {
@@ -160,9 +160,7 @@ public sealed partial class EmergencyShuttleSystem : EntitySystem
     public override void Update(float frameTime)
     {
         base.Update(frameTime);
-        // Don't handle any of this logic if in lobby
-        if (_ticker.RunLevel != GameRunLevel.PreRoundLobby)
-            UpdateEmergencyConsole(frameTime);
+        UpdateEmergencyConsole(frameTime);
     }
 
     /// <summary>
@@ -185,7 +183,7 @@ public sealed partial class EmergencyShuttleSystem : EntitySystem
             return;
         }
 
-        var targetGrid = _station.GetLargestGrid(station.Value);
+        var targetGrid = _station.GetLargestGrid(Comp<StationDataComponent>(station.Value));
         if (targetGrid == null)
             return;
 
@@ -274,7 +272,7 @@ public sealed partial class EmergencyShuttleSystem : EntitySystem
             return null;
         }
 
-        var targetGrid = _station.GetLargestGrid(stationUid);
+        var targetGrid = _station.GetLargestGrid(Comp<StationDataComponent>(stationUid));
 
         // UHH GOOD LUCK
         if (targetGrid == null)
@@ -327,7 +325,6 @@ public sealed partial class EmergencyShuttleSystem : EntitySystem
     /// </summary>
     public void AnnounceShuttleDock(ShuttleDockResult result, bool extended)
     {
-        var stationShuttleComp = result.Station.Comp;
         var shuttle = result.Station.Comp.EmergencyShuttle;
 
         DebugTools.Assert(shuttle != null);
@@ -336,11 +333,11 @@ public sealed partial class EmergencyShuttleSystem : EntitySystem
         {
             _chatSystem.DispatchStationAnnouncement(
                 result.Station,
-                Loc.GetString(stationShuttleComp.FailureAnnouncement),
+                Loc.GetString("emergency-shuttle-good-luck"),
                 playDefaultSound: false);
 
             // TODO: Need filter extensions or something don't blame me.
-            _audio.PlayGlobal(stationShuttleComp.FailureAudio, Filter.Broadcast(), true);
+            _audio.PlayGlobal("/Audio/Misc/notice1.ogg", Filter.Broadcast(), true);
             return;
         }
 
@@ -359,10 +356,10 @@ public sealed partial class EmergencyShuttleSystem : EntitySystem
         var location = FormattedMessage.RemoveMarkupPermissive(
             _navMap.GetNearestBeaconString((shuttle.Value, Transform(shuttle.Value))));
 
-        var extendedText = extended ? Loc.GetString(stationShuttleComp.LaunchExtendedMessage) : "";
+        var extendedText = extended ? Loc.GetString("emergency-shuttle-extended") : "";
         var locKey = result.ResultType == ShuttleDockResultType.NoDock
-            ? stationShuttleComp.NearbyAnnouncement
-            : stationShuttleComp.DockedAnnouncement;
+            ? "emergency-shuttle-nearby"
+            : "emergency-shuttle-docked";
 
         _chatSystem.DispatchStationAnnouncement(
             result.Station,
@@ -395,8 +392,8 @@ public sealed partial class EmergencyShuttleSystem : EntitySystem
         // Play announcement audio.
 
         var audioFile = result.ResultType == ShuttleDockResultType.NoDock
-            ? stationShuttleComp.NearbyAudio
-            : stationShuttleComp.DockedAudio;
+            ? "/Audio/Misc/notice1.ogg"
+            : "/Audio/_DeadSpace/Announcements/emergency_s_docked.ogg"; // DS14-Announcements
 
         // TODO: Need filter extensions or something don't blame me.
         _audio.PlayGlobal(audioFile, Filter.Broadcast(), true);
@@ -469,6 +466,7 @@ public sealed partial class EmergencyShuttleSystem : EntitySystem
             _ => 1,
         };
 
+        Multiplier = multiplier;
         _consoleAccumulator *= multiplier;
 
         foreach (var shuttleDockResult in dockResults)
@@ -653,11 +651,18 @@ public sealed partial class EmergencyShuttleSystem : EntitySystem
         if (!EmergencyShuttleArrived)
             return false;
 
-        // check if target is on an emergency shuttle
+        // check each emergency shuttle
         var xform = Transform(target);
+        foreach (var stationData in EntityQuery<StationEmergencyShuttleComponent>())
+        {
+            if (stationData.EmergencyShuttle == null)
+                continue;
 
-        if (HasComp<EmergencyShuttleComponent>(xform.GridUid))
-            return true;
+            if (IsOnGrid(xform, stationData.EmergencyShuttle.Value))
+            {
+                return true;
+            }
+        }
 
         return false;
     }

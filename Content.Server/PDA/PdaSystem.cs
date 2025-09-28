@@ -2,26 +2,34 @@ using Content.Server.Access.Systems;
 using Content.Server.AlertLevel;
 using Content.Server.CartridgeLoader;
 using Content.Server.Chat.Managers;
+using Content.Server.DeviceNetwork.Components;
 using Content.Server.Instruments;
+using Content.Server.Light.EntitySystems;
 using Content.Server.PDA.Ringer;
+using Content.Server.RoundEnd;
 using Content.Server.Station.Systems;
+using Content.Server.Store.Components;
 using Content.Server.Store.Systems;
 using Content.Server.Traitor.Uplink;
 using Content.Shared.Access.Components;
 using Content.Shared.CartridgeLoader;
 using Content.Shared.Chat;
-using Content.Shared.DeviceNetwork.Components;
-using Content.Shared.Implants;
-using Content.Shared.Inventory;
 using Content.Shared.Light;
+using Content.Shared.Light.Components;
 using Content.Shared.Light.EntitySystems;
 using Content.Shared.PDA;
-using Content.Shared.PDA.Ringer;
+using Content.Shared.CCVar;
+using Content.Shared.Store.Components;
+using Microsoft.CodeAnalysis.Elfie.Serialization;
 using Robust.Server.Containers;
 using Robust.Server.GameObjects;
 using Robust.Shared.Containers;
 using Robust.Shared.Player;
 using Robust.Shared.Utility;
+using Robust.Shared.Configuration;
+using Content.Server.Shuttles.Systems;
+using Content.Server.Shuttles.Components;
+using System.Linq;
 
 namespace Content.Server.PDA
 {
@@ -37,6 +45,9 @@ namespace Content.Server.PDA
         [Dependency] private readonly UnpoweredFlashlightSystem _unpoweredFlashlight = default!;
         [Dependency] private readonly ContainerSystem _containerSystem = default!;
         [Dependency] private readonly IdCardSystem _idCard = default!;
+        [Dependency] private readonly RoundEndSystem _roundEndSystem = default!;
+        [Dependency] private readonly IConfigurationManager _configManager = default!;
+        [Dependency] private readonly EmergencyShuttleSystem _emergencyShuttleSystem = default!;
 
         public override void Initialize()
         {
@@ -58,14 +69,7 @@ namespace Content.Server.PDA
             SubscribeLocalEvent<StationRenamedEvent>(OnStationRenamed);
             SubscribeLocalEvent<EntityRenamedEvent>(OnEntityRenamed, after: new[] { typeof(IdCardSystem) });
             SubscribeLocalEvent<AlertLevelChangedEvent>(OnAlertLevelChanged);
-            SubscribeLocalEvent<PdaComponent, InventoryRelayedEvent<ChameleonControllerOutfitSelectedEvent>>(ChameleonControllerOutfitItemSelected);
-        }
-
-        private void ChameleonControllerOutfitItemSelected(Entity<PdaComponent> ent, ref InventoryRelayedEvent<ChameleonControllerOutfitSelectedEvent> args)
-        {
-            // Relay it to your ID so it can update as well.
-            if (ent.Comp.ContainedId != null)
-                RaiseLocalEvent(ent.Comp.ContainedId.Value, args);
+            SubscribeLocalEvent<RoundEndSystemChangedEvent>(OnRoundEndChanged);
         }
 
         private void OnEntityRenamed(ref EntityRenamedEvent ev)
@@ -143,6 +147,17 @@ namespace Content.Server.PDA
             UpdateAllPdaUisOnStation();
         }
 
+        private void OnRoundEndChanged(RoundEndSystemChangedEvent ev)
+        {
+            UpdateAllPdaUisOnStation();
+        }
+
+        public override void Update(float frameTime)
+        {
+            base.Update(frameTime);
+            if (_roundEndSystem.IsRoundEndRequested()) UpdateAllPdaUisOnStation();
+        }
+
         private void UpdateAllPdaUisOnStation()
         {
             var query = AllEntityQuery<PdaComponent>();
@@ -177,7 +192,7 @@ namespace Content.Server.PDA
         /// <summary>
         /// Send new UI state to clients, call if you modify something like uplink.
         /// </summary>
-        public override void UpdatePdaUi(EntityUid uid, PdaComponent? pda = null)
+        public void UpdatePdaUi(EntityUid uid, PdaComponent? pda = null)
         {
             if (!Resolve(uid, ref pda, false))
                 return;
@@ -198,6 +213,11 @@ namespace Content.Server.PDA
             if (!TryComp(uid, out CartridgeLoaderComponent? loader))
                 return;
 
+            var shuttleDockTime = TimeSpan.FromSeconds(_configManager.GetCVar(CCVars.EmergencyShuttleDockTime));
+            shuttleDockTime *= _emergencyShuttleSystem.Multiplier;
+
+            var expectedCountdownEnd = _roundEndSystem.ExpectedCountdownEnd;
+            var isRoundEndRequested = _roundEndSystem.IsRoundEndRequested();
             var programs = _cartridgeLoader.GetAvailablePrograms(uid, loader);
             var id = CompOrNull<IdCardComponent>(pda.ContainedId);
             var state = new PdaUpdateState(
@@ -217,7 +237,10 @@ namespace Content.Server.PDA
                 pda.StationName,
                 showUplink,
                 hasInstrument,
-                address);
+                address,
+                expectedCountdownEnd,
+                isRoundEndRequested,
+                shuttleDockTime);
 
             _ui.SetUiState(uid, PdaUiKey.Key, state);
         }
@@ -254,7 +277,7 @@ namespace Content.Server.PDA
                 return;
 
             if (HasComp<RingerComponent>(uid))
-                _ringer.TryToggleRingerUi(uid, msg.Actor);
+                _ringer.ToggleRingerUI(uid, msg.Actor);
         }
 
         private void OnUiMessage(EntityUid uid, PdaComponent pda, PdaShowMusicMessage msg)
@@ -283,7 +306,7 @@ namespace Content.Server.PDA
 
             if (TryComp<RingerUplinkComponent>(uid, out var uplink))
             {
-                _ringer.LockUplink((uid, uplink));
+                _ringer.LockUplink(uid, uplink);
                 UpdatePdaUi(uid, pda);
             }
         }
