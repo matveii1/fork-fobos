@@ -173,7 +173,7 @@ namespace Content.Client.PDA
             StationTimeLabel.SetMarkup(Loc.GetString("comp-pda-ui-station-time",
                 ("time", stationTime.ToString("hh\\:mm\\:ss")),
                 ("date", DateTime.UtcNow.AddHours(3).ToString("dd.MM") + ".2709")));
-
+            // DS14-start
             if (state.IsRoundEndRequested)
             {
                 var diff1 = MathHelper.Max((state.ExpectedCountdownEnd - _gameTiming.CurTime) ?? TimeSpan.Zero, TimeSpan.Zero);
@@ -197,7 +197,7 @@ namespace Content.Client.PDA
             {
                 EvacTimeLabel.SetMarkup(Loc.GetString("comp-pda-ui-evac-not-called"));
             }
-
+            // DS14-end
             var alertLevel = state.PdaOwnerInfo.StationAlertLevel;
             var alertColor = state.PdaOwnerInfo.StationAlertColor;
             var alertLevelKey = alertLevel != null ? $"alert-level-{alertLevel}" : "alert-level-unknown";
