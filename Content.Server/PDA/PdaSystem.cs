@@ -4,8 +4,6 @@ using Content.Server.CartridgeLoader;
 using Content.Server.Chat.Managers;
 using Content.Server.Instruments;
 using Content.Server.PDA.Ringer;
-using Content.Server.RoundEnd;
-using Content.Server.Shuttles.Systems;
 using Content.Server.Station.Systems;
 using Content.Server.Store.Systems;
 using Content.Server.Traitor.Uplink;
@@ -19,12 +17,14 @@ using Content.Shared.Light;
 using Content.Shared.Light.EntitySystems;
 using Content.Shared.PDA;
 using Content.Shared.PDA.Ringer;
-using Content.Shared.CCVar;
 using Robust.Server.Containers;
 using Robust.Server.GameObjects;
 using Robust.Shared.Containers;
 using Robust.Shared.Player;
 using Robust.Shared.Utility;
+using Content.Shared.CCVar;
+using Content.Server.RoundEnd;
+using Content.Server.Shuttles.Systems;
 using Robust.Shared.Configuration;
 
 namespace Content.Server.PDA
@@ -46,6 +46,7 @@ namespace Content.Server.PDA
         [Dependency] private readonly IConfigurationManager _configManager = default!;
         [Dependency] private readonly EmergencyShuttleSystem _emergencyShuttleSystem = default!;
         // DS14-end
+
         public override void Initialize()
         {
             base.Initialize();
@@ -69,6 +70,14 @@ namespace Content.Server.PDA
             SubscribeLocalEvent<RoundEndSystemChangedEvent>(OnRoundEndChanged); // DS14
             SubscribeLocalEvent<PdaComponent, InventoryRelayedEvent<ChameleonControllerOutfitSelectedEvent>>(ChameleonControllerOutfitItemSelected);
         }
+
+        // DS14-start
+        public override void Update(float frameTime)
+        {
+            base.Update(frameTime);
+            if (_roundEndSystem.IsRoundEndRequested()) UpdateAllPdaUisOnStation();
+        }
+        // DS14-end
 
         private void ChameleonControllerOutfitItemSelected(Entity<PdaComponent> ent, ref InventoryRelayedEvent<ChameleonControllerOutfitSelectedEvent> args)
         {
@@ -151,18 +160,14 @@ namespace Content.Server.PDA
         {
             UpdateAllPdaUisOnStation();
         }
+
         // DS14-start
         private void OnRoundEndChanged(RoundEndSystemChangedEvent ev)
         {
             UpdateAllPdaUisOnStation();
         }
-
-        public override void Update(float frameTime)
-        {
-            base.Update(frameTime);
-            if (_roundEndSystem.IsRoundEndRequested()) UpdateAllPdaUisOnStation();
-        }
         // DS14-end
+
         private void UpdateAllPdaUisOnStation()
         {
             var query = AllEntityQuery<PdaComponent>();
@@ -247,8 +252,9 @@ namespace Content.Server.PDA
                 // DS14-start
                 expectedCountdownEnd,
                 isRoundEndRequested,
-                shuttleDockTime);
+                shuttleDockTime
                 // DS14-end
+                );
 
             _ui.SetUiState(uid, PdaUiKey.Key, state);
         }
