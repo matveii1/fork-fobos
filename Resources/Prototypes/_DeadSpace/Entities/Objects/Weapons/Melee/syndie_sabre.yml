@@ -8,7 +8,7 @@
     sprite: _DeadSpace/Objects/Weapons/Melee/syndie_sabre.rsi
   - type: MeleeWeapon
     ResistanceBypass: true # DS14
-    attackRate: 1.2
+    attackRate: 1.1
     damage:
       types:
         Slash: 3
