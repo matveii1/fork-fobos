@@ -20,7 +20,7 @@
     reflectProb: .1
     spread: 45
   - type: DamageOtherOnHit
-    ignoreResistances: true
+    ignoreResistances: true # DS14
     damage:
       types:
         Slash: 10
