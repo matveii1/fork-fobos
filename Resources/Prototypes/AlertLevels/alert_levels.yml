@@ -77,4 +77,4 @@
       color: DarkViolet
       emergencyLightColor: DarkViolet
       forceEnableEmergencyLights: true
-      shuttleTime: 1200
+      shuttleTime: 1201
